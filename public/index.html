@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BetGame | Double or Nothing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background: radial-gradient(circle at top right, #eff6ff, #f8fafc);
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.4);
+        }
+        .bento-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .bento-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.05);
+        }
+        .progress-ring__circle {
+            transition: stroke-dashoffset 0.1s linear;
+            transform: rotate(-90deg);
+            transform-origin: 50% 50%;
+        }
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-900">
+    <!-- Navbar -->
+    <nav class="sticky top-0 z-50 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex justify-between items-center glass rounded-2xl px-6 py-3 shadow-sm">
+            <div class="flex items-center gap-3 font-extrabold text-2xl text-blue-600 tracking-tight">
+                <div class="bg-blue-600 p-1.5 rounded-lg">
+                    <i data-lucide="zap" class="w-6 h-6 text-white fill-white"></i>
+                </div>
+                <span>BetGame</span>
+            </div>
+            <div id="user-nav" class="flex items-center gap-6">
+                <!-- User Info Injection -->
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto p-6 grid grid-cols-12 gap-6">
+        <!-- Main Betting Area (Bento Grid) -->
+        <div class="col-span-12 lg:col-span-8 space-y-6">
+
+            <!-- Hero Section: Countdown -->
+            <div class="bento-card glass rounded-3xl p-8 flex flex-col items-center justify-center relative overflow-hidden min-h-[320px]">
+                <div class="absolute top-6 left-8 flex items-center gap-2 text-slate-400 font-semibold text-sm uppercase tracking-widest">
+                    <i data-lucide="clock" class="w-4 h-4"></i>
+                    Round #<span id="round-id">--</span>
+                </div>
+
+                <div class="relative flex items-center justify-center">
+                    <svg class="w-48 h-48">
+                        <circle class="text-slate-100" stroke-width="8" stroke="currentColor" fill="transparent" r="80" cx="96" cy="96"/>
+                        <circle id="progress-circle" class="text-blue-600 progress-ring__circle" stroke-width="8" stroke-dasharray="502.6" stroke-dashoffset="0" stroke-linecap="round" stroke="currentColor" fill="transparent" r="80" cx="96" cy="96"/>
+                    </svg>
+                    <div class="absolute inset-0 flex flex-col items-center justify-center">
+                        <span id="countdown" class="text-5xl font-black tabular-nums">10.0</span>
+                        <span class="text-xs font-bold text-slate-400 uppercase">seconds</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Betting Controls -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Input Card -->
+                <div class="bento-card glass rounded-3xl p-6 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-sm font-bold text-slate-400 uppercase mb-4 tracking-wider">Bet Amount</h3>
+                        <div class="relative">
+                            <input type="number" id="bet-amount" value="100" class="w-full bg-slate-50/50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-3xl font-bold focus:border-blue-500 focus:outline-none transition-all">
+                            <span class="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 font-bold text-xl">$</span>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2 mt-4">
+                        <button onclick="setBet(10)" class="py-2 rounded-xl bg-white border border-slate-100 hover:border-blue-200 hover:bg-blue-50 text-xs font-bold transition-all">+$10</button>
+                        <button onclick="setBet(50)" class="py-2 rounded-xl bg-white border border-slate-100 hover:border-blue-200 hover:bg-blue-50 text-xs font-bold transition-all">+$50</button>
+                        <button onclick="setBet(100)" class="py-2 rounded-xl bg-white border border-slate-100 hover:border-blue-200 hover:bg-blue-50 text-xs font-bold transition-all">+$100</button>
+                        <button onclick="setMax()" class="py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-all">MAX</button>
+                    </div>
+                </div>
+
+                <!-- Action Card -->
+                <div class="bento-card glass rounded-3xl p-6 flex flex-col justify-between bg-gradient-to-br from-blue-600 to-blue-700 text-white border-none">
+                    <div>
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="text-sm font-bold opacity-80 uppercase tracking-wider">Potential Payout</h3>
+                            <i data-lucide="info" class="w-4 h-4 opacity-60"></i>
+                        </div>
+                        <div class="text-4xl font-black" id="payout-preview">$200.00</div>
+                        <p class="text-xs opacity-70 mt-1">50.0% Win Probability</p>
+                    </div>
+                    <button onclick="placeBet()" id="bet-btn" class="w-full bg-white text-blue-600 font-bold py-4 rounded-2xl shadow-xl hover:shadow-blue-900/20 transform active:scale-[0.98] transition-all mt-4 disabled:opacity-50">
+                        PLACE BET
+                    </button>
+                </div>
+            </div>
+
+            <!-- History Bento Item -->
+            <div class="bento-card glass rounded-3xl p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h3 class="font-bold text-lg flex items-center gap-2">
+                        <i data-lucide="trello" class="w-5 h-5 text-blue-500"></i>
+                        Recent Outcomes
+                    </h3>
+                </div>
+                <div id="history-list" class="grid grid-cols-5 md:grid-cols-10 gap-3">
+                    <!-- Dynamic -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div class="col-span-12 lg:col-span-4 space-y-6">
+            <!-- Leaderboard -->
+            <div class="bento-card glass rounded-3xl p-6 h-full">
+                <h3 class="font-bold text-xl mb-6 flex items-center gap-3">
+                    <i data-lucide="crown" class="w-6 h-6 text-yellow-500"></i>
+                    Top Players
+                </h3>
+                <div id="leaderboard" class="space-y-1">
+                    <!-- Dynamic -->
+                </div>
+                <button onclick="resetBalance()" id="reset-btn" class="hidden w-full mt-6 py-3 rounded-xl border-2 border-dashed border-blue-200 text-blue-500 font-bold hover:bg-blue-50 transition-all text-sm">
+                    Reset Balance to $1,000
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- Auth Modal -->
+    <div id="auth-modal" class="fixed inset-0 z-[100] hidden flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md">
+        <div class="bg-white rounded-[2rem] p-10 max-w-md w-full shadow-2xl">
+            <div class="text-center mb-8">
+                <div class="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                    <i data-lucide="mail" class="w-8 h-8 text-blue-600"></i>
+                </div>
+                <h2 id="modal-title" class="text-3xl font-extrabold tracking-tight">Email Login</h2>
+                <p class="text-slate-500 mt-2">Enter your email to start betting</p>
+            </div>
+
+            <div id="register-step" class="space-y-4">
+                <input type="email" id="email-input" placeholder="name@example.com" class="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-blue-500 focus:outline-none transition-all font-medium">
+                <button onclick="startRegister()" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">Send MAGIC Code</button>
+            </div>
+
+            <div id="verify-step" class="hidden space-y-6">
+                <div class="flex flex-col gap-2">
+                    <input type="text" id="otp-input" placeholder="000000" maxlength="6" class="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-center text-4xl font-black tracking-[0.3em] focus:border-blue-500 focus:outline-none">
+                    <p class="text-center text-xs text-slate-400 font-medium">6-digit code sent to your inbox</p>
+                </div>
+                <div id="turnstile-container" class="flex justify-center"></div>
+                <button onclick="verifyCode()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all">Verify & Login</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"></script>
+    <script>
+        let currentUser = null;
+        let gameState = {};
+        const circle = document.getElementById('progress-circle');
+        const radius = circle.r.baseVal.value;
+        const circumference = radius * 2 * Math.PI;
+        circle.style.strokeDasharray = `${circumference} ${circumference}`;
+
+        function setProgress(percent) {
+            const offset = circumference - (percent / 100 * circumference);
+            circle.style.strokeDashoffset = offset;
+        }
+
+        async function init() {
+            lucide.createIcons();
+            document.getElementById('bet-amount').addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value) || 0;
+                document.getElementById('payout-preview').innerText = '$' + (val * 2).toLocaleString(undefined, {minimumFractionDigits: 2});
+            });
+            await fetchUser();
+            pollGameState();
+            requestAnimationFrame(updateFrame);
+        }
+
+        async function fetchUser() {
+            try {
+                const res = await fetch('/api/me');
+                if (res.ok) currentUser = await res.json();
+                else currentUser = null;
+                updateUserInfo();
+            } catch (e) { currentUser = null; }
+        }
+
+        function updateUserInfo() {
+            const nav = document.getElementById('user-nav');
+            if (currentUser) {
+                nav.innerHTML = `
+                    <div class="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
+                        <div class="text-right">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">${currentUser.email.split('@')[0]}</p>
+                            <p class="font-extrabold text-blue-600">$${currentUser.balance.toLocaleString()}</p>
+                        </div>
+                        <div class="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
+                            <i data-lucide="user" class="w-4 h-4 text-blue-600"></i>
+                        </div>
+                    </div>
+                    <button onclick="logout()" class="text-slate-400 hover:text-red-500 transition-colors">
+                        <i data-lucide="log-out" class="w-5 h-5"></i>
+                    </button>
+                `;
+                document.getElementById('reset-btn').classList.toggle('hidden', currentUser.balance >= 1000);
+            } else {
+                nav.innerHTML = `<button onclick="showAuth()" class="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all">Connect Wallet</button>`;
+            }
+            lucide.createIcons();
+        }
+
+        async function pollGameState() {
+            try {
+                const res = await fetch('/api/game/state');
+                gameState = await res.json();
+                document.getElementById('round-id').innerText = gameState.round_id;
+
+                // Update turnstile sitekey if provided
+                if (gameState.turnstile_sitekey) {
+                    window.turnstile_sitekey = gameState.turnstile_sitekey;
+                }
+
+                updateLeaderboard();
+                updateHistory();
+            } catch (e) {}
+            setTimeout(pollGameState, 1000);
+        }
+
+        function updateFrame() {
+            if (gameState.next_res_at) {
+                const now = new Date();
+                const resAt = new Date(gameState.next_res_at);
+                const diff = (resAt - now) / 1000;
+                const progress = Math.max(0, Math.min(100, (10 - diff) * 10));
+
+                setProgress(progress);
+                document.getElementById('countdown').innerText = diff > 0 ? diff.toFixed(1) : "0.0";
+
+                if (diff <= 0) {
+                    // Force refresh user data slightly after resolution
+                    if (now % 2000 < 50) fetchUser();
+                }
+            }
+            requestAnimationFrame(updateFrame);
+        }
+
+        function updateHistory() {
+            const container = document.getElementById('history-list');
+            container.innerHTML = (gameState.history || []).map(h => `
+                <div class="flex flex-col items-center gap-1">
+                    <div class="w-full aspect-square rounded-xl flex items-center justify-center font-black text-xs ${h.outcome === 'win' ? 'bg-green-50 text-green-600 border border-green-100' : 'bg-red-50 text-red-600 border border-red-100'}">
+                        ${h.outcome === 'win' ? 'W' : 'L'}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateLeaderboard() {
+            const lb = document.getElementById('leaderboard');
+            lb.innerHTML = (gameState.leaderboard || []).map((u, i) => `
+                <div class="flex justify-between items-center p-3 rounded-2xl hover:bg-slate-50 transition-colors">
+                    <div class="flex items-center gap-4">
+                        <span class="w-6 h-6 flex items-center justify-center rounded-lg ${i < 3 ? 'bg-yellow-100 text-yellow-700 font-bold' : 'text-slate-400 font-medium'} text-xs">
+                            ${i + 1}
+                        </span>
+                        <span class="font-bold text-slate-700">${u.email.split('@')[0]}</span>
+                    </div>
+                    <span class="font-black text-blue-600">$${u.balance.toLocaleString()}</span>
+                </div>
+            `).join('');
+        }
+
+        function setBet(add) {
+            const input = document.getElementById('bet-amount');
+            input.value = (parseInt(input.value) || 0) + add;
+            input.dispatchEvent(new Event('input'));
+        }
+
+        function setMax() {
+            if (currentUser) {
+                document.getElementById('bet-amount').value = currentUser.balance;
+                document.getElementById('bet-amount').dispatchEvent(new Event('input'));
+            }
+        }
+
+        async function placeBet() {
+            if (!currentUser) return showAuth();
+            const btn = document.getElementById('bet-btn');
+            btn.disabled = true;
+            const amount = parseInt(document.getElementById('bet-amount').value);
+            const res = await fetch('/api/bet', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ amount })
+            });
+            if (res.ok) {
+                await fetchUser();
+            } else {
+                alert(await res.text());
+            }
+            btn.disabled = false;
+        }
+
+        async function resetBalance() {
+            const res = await fetch('/api/reset', { method: 'POST' });
+            if (res.ok) await fetchUser();
+        }
+
+        function showAuth() { document.getElementById('auth-modal').classList.remove('hidden'); }
+        async function startRegister() {
+            const email = document.getElementById('email-input').value;
+            await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            document.getElementById('register-step').classList.add('hidden');
+            document.getElementById('verify-step').classList.remove('hidden');
+            turnstile.render('#turnstile-container', {
+                sitekey: window.turnstile_sitekey || '1x00000000000000000000AA',
+                callback: (token) => { window.tsToken = token; }
+            });
+        }
+        async function verifyCode() {
+            const res = await fetch('/api/auth/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: document.getElementById('email-input').value,
+                    code: document.getElementById('otp-input').value,
+                    turnstile_token: window.tsToken || 'mock'
+                })
+            });
+            if (res.ok) location.reload();
+            else alert('Invalid verification');
+        }
+        function logout() {
+            document.cookie = "token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+            location.reload();
+        }
+
+        init();
+    </script>
+</body>
+</html>
