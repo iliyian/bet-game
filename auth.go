@@ -11,12 +11,14 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var jwtKey = []byte("default_secret_key_1234567890123456789012")
+var jwtKey []byte
 
 func init() {
-	if s := os.Getenv("JWT_SECRET"); s != "" {
-		jwtKey = []byte(s)
+	s := os.Getenv("JWT_SECRET")
+	if s == "" {
+		s = "default_secret_key_1234567890123456789012"
 	}
+	jwtKey = []byte(s)
 }
 
 type Claims struct {
