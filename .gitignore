@@ -1,0 +1,22 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bet-game
+
+# Local configuration
+.env
+
+# Database
+game.db
+betgame.db
+*.db-journal
+
+# IDEs
+.idea/
+.vscode/
+
+# Claude / AI
+.claude/
