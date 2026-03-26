@@ -26,10 +26,15 @@ func initDB() {
 	CREATE TABLE IF NOT EXISTS users (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		email TEXT UNIQUE,
+		username TEXT UNIQUE,
 		balance INTEGER DEFAULT 1000,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
+`
+	db.Exec("ALTER TABLE users ADD COLUMN username TEXT")
+	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username ON users(username)")
 
+	createTables += `
 	CREATE TABLE IF NOT EXISTS otp_codes (
 		email TEXT PRIMARY KEY,
 		code TEXT,

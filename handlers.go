@@ -86,13 +86,38 @@ func VerifyHandler(w http.ResponseWriter, r *http.Request) {
 func GetMeHandler(w http.ResponseWriter, r *http.Request) {
 	userID := r.Context().Value("user_id").(int)
 	var balance int
-	var email string
-	db.QueryRow("SELECT email, balance FROM users WHERE id = ?", userID).Scan(&email, &balance)
+	var email, username sql.NullString
+	db.QueryRow("SELECT email, username, balance FROM users WHERE id = ?", userID).Scan(&email, &username, &balance)
 
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"email":   email,
-		"balance": balance,
+		"email":    email.String,
+		"username": username.String,
+		"balance":  balance,
 	})
+}
+
+func UpdateUsernameHandler(w http.ResponseWriter, r *http.Request) {
+	userID := r.Context().Value("user_id").(int)
+	var input struct {
+		Username string `json:"username"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if len(input.Username) < 3 || len(input.Username) > 20 {
+		http.Error(w, "用户名长度必须在3-20之间", http.StatusBadRequest)
+		return
+	}
+
+	_, err := db.Exec("UPDATE users SET username = ? WHERE id = ?", input.Username, userID)
+	if err != nil {
+		http.Error(w, "用户名已被占用", http.StatusConflict)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }
 
 func PlaceBetHandler(w http.ResponseWriter, r *http.Request) {
@@ -160,13 +185,13 @@ func GetGameStateHandler(w http.ResponseWriter, r *http.Request) {
 		history = append(history, map[string]interface{}{"outcome": outcome, "time": t})
 	}
 
-	rows, _ = db.Query("SELECT email, balance FROM users ORDER BY balance DESC LIMIT 10")
+	rows, _ = db.Query("SELECT COALESCE(username, SUBSTR(email, 1, INSTR(email, '@')-1)), balance FROM users ORDER BY balance DESC LIMIT 10")
 	var leaderboard []map[string]interface{}
 	for rows.Next() {
-		var email string
+		var name string
 		var balance int
-		rows.Scan(&email, &balance)
-		leaderboard = append(leaderboard, map[string]interface{}{"email": email, "balance": balance})
+		rows.Scan(&name, &balance)
+		leaderboard = append(leaderboard, map[string]interface{}{"name": name, "balance": balance})
 	}
 
 	json.NewEncoder(w).Encode(map[string]interface{}{

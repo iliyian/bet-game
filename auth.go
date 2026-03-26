@@ -11,7 +11,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-var jwtKey = []byte(os.Getenv("JWT_SECRET"))
+var jwtKey = []byte("default_secret_key_1234567890123456789012")
 
 func init() {
 	if s := os.Getenv("JWT_SECRET"); s != "" {

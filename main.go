@@ -29,6 +29,7 @@ func main() {
 		r.Group(func(r chi.Router) {
 			r.Use(AuthMiddleware)
 			r.Get("/me", GetMeHandler)
+			r.Post("/me/username", UpdateUsernameHandler)
 			r.Post("/bet", PlaceBetHandler)
 			r.Post("/reset", ResetBalanceHandler)
 		})
