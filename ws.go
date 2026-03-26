@@ -97,9 +97,16 @@ func WSHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	for {
-		_, _, err := conn.ReadMessage()
+		_, msg, err := conn.ReadMessage()
 		if err != nil {
 			break
+		}
+		// Application-level ping: client sends {"type":"ping"}, server replies {"type":"pong"}.
+		if string(msg) == `{"type":"ping"}` {
+			client.mu.Lock()
+			conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"pong"}`))
+			client.mu.Unlock()
 		}
 	}
 

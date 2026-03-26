@@ -225,7 +225,6 @@
         let gameState = {};
         let lastResultId = null;
         let activeBetPercent = null; // Track last selected bet percentage
-        let latencyMs = null; // Latest network round-trip time
 
         // Escape HTML to prevent XSS from user-controlled data.
         function escapeHTML(str) {
@@ -355,6 +354,8 @@
 
         let ws = null;
         let wsReconnectDelay = 1000;
+        let pingTimer = null;
+        let pingSentAt = 0;
 
         function connectWebSocket() {
             const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -362,22 +363,25 @@
 
             ws.onopen = () => {
                 wsReconnectDelay = 1000;
-                updatePing(0);
+                // Start periodic ping to measure RTT.
+                sendPing();
+                pingTimer = setInterval(sendPing, 3000);
             };
 
             ws.onmessage = (event) => {
-                const receiveTime = performance.now();
                 try {
                     const data = JSON.parse(event.data);
+                    if (data.type === 'pong') {
+                        updatePing(Math.round(performance.now() - pingSentAt));
+                        return;
+                    }
                     handleGameState(data);
-                    // Measure pseudo-latency: time to parse + process.
-                    const delta = Math.round(performance.now() - receiveTime);
-                    updatePing(delta < 1 ? 1 : delta);
                 } catch (e) {}
             };
 
             ws.onclose = () => {
                 updatePing(null);
+                clearInterval(pingTimer);
                 setTimeout(() => {
                     wsReconnectDelay = Math.min(wsReconnectDelay * 2, 10000);
                     connectWebSocket();
@@ -385,6 +389,13 @@
             };
 
             ws.onerror = () => ws.close();
+        }
+
+        function sendPing() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                pingSentAt = performance.now();
+                ws.send('{"type":"ping"}');
+            }
         }
 
         function handleGameState(data) {
