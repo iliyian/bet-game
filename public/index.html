@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BetGame | Double or Nothing</title>
+    <title>BetGame | 翻倍还是归零</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
     <style>
         body {
-            font-family: 'Plus Jakarta Sans', sans-serif;
+            font-family: 'Plus Jakarta Sans', 'Noto Sans SC', sans-serif;
             background: radial-gradient(circle at top right, #eff6ff, #f8fafc);
         }
         .glass {
@@ -33,9 +33,27 @@
             -webkit-appearance: none;
             margin: 0;
         }
+        .toast {
+            position: fixed;
+            top: 2rem;
+            right: 2rem;
+            padding: 1rem 2rem;
+            border-radius: 1rem;
+            color: white;
+            font-weight: bold;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
     </style>
 </head>
 <body class="min-h-screen text-slate-900">
+    <div id="toast-container"></div>
+
     <!-- Navbar -->
     <nav class="sticky top-0 z-50 px-6 py-4">
         <div class="max-w-7xl mx-auto flex justify-between items-center glass rounded-2xl px-6 py-3 shadow-sm">
@@ -59,7 +77,7 @@
             <div class="bento-card glass rounded-3xl p-8 flex flex-col items-center justify-center relative overflow-hidden min-h-[320px]">
                 <div class="absolute top-6 left-8 flex items-center gap-2 text-slate-400 font-semibold text-sm uppercase tracking-widest">
                     <i data-lucide="clock" class="w-4 h-4"></i>
-                    Round #<span id="round-id">--</span>
+                    第 #<span id="round-id">--</span> 轮
                 </div>
 
                 <div class="relative flex items-center justify-center">
@@ -69,9 +87,10 @@
                     </svg>
                     <div class="absolute inset-0 flex flex-col items-center justify-center">
                         <span id="countdown" class="text-5xl font-black tabular-nums">10.0</span>
-                        <span class="text-xs font-bold text-slate-400 uppercase">seconds</span>
+                        <span class="text-xs font-bold text-slate-400 uppercase">秒后结算</span>
                     </div>
                 </div>
+                <div id="last-result" class="mt-4 font-bold text-lg h-8 animate-pulse"></div>
             </div>
 
             <!-- Betting Controls -->
@@ -79,7 +98,7 @@
                 <!-- Input Card -->
                 <div class="bento-card glass rounded-3xl p-6 flex flex-col justify-between">
                     <div>
-                        <h3 class="text-sm font-bold text-slate-400 uppercase mb-4 tracking-wider">Bet Amount</h3>
+                        <h3 class="text-sm font-bold text-slate-400 uppercase mb-4 tracking-wider">投注金额</h3>
                         <div class="relative">
                             <input type="number" id="bet-amount" value="100" class="w-full bg-slate-50/50 border-2 border-slate-100 rounded-2xl px-6 py-4 text-3xl font-bold focus:border-blue-500 focus:outline-none transition-all">
                             <span class="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 font-bold text-xl">$</span>
@@ -89,7 +108,7 @@
                         <button onclick="setBet(10)" class="py-2 rounded-xl bg-white border border-slate-100 hover:border-blue-200 hover:bg-blue-50 text-xs font-bold transition-all">+$10</button>
                         <button onclick="setBet(50)" class="py-2 rounded-xl bg-white border border-slate-100 hover:border-blue-200 hover:bg-blue-50 text-xs font-bold transition-all">+$50</button>
                         <button onclick="setBet(100)" class="py-2 rounded-xl bg-white border border-slate-100 hover:border-blue-200 hover:bg-blue-50 text-xs font-bold transition-all">+$100</button>
-                        <button onclick="setMax()" class="py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-all">MAX</button>
+                        <button onclick="setMax()" class="py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-all">全部</button>
                     </div>
                 </div>
 
@@ -97,14 +116,14 @@
                 <div class="bento-card glass rounded-3xl p-6 flex flex-col justify-between bg-gradient-to-br from-blue-600 to-blue-700 text-white border-none">
                     <div>
                         <div class="flex justify-between items-start mb-2">
-                            <h3 class="text-sm font-bold opacity-80 uppercase tracking-wider">Potential Payout</h3>
+                            <h3 class="text-sm font-bold opacity-80 uppercase tracking-wider">预期收益</h3>
                             <i data-lucide="info" class="w-4 h-4 opacity-60"></i>
                         </div>
                         <div class="text-4xl font-black" id="payout-preview">$200.00</div>
-                        <p class="text-xs opacity-70 mt-1">50.0% Win Probability</p>
+                        <p class="text-xs opacity-70 mt-1">胜率 50.0%</p>
                     </div>
                     <button onclick="placeBet()" id="bet-btn" class="w-full bg-white text-blue-600 font-bold py-4 rounded-2xl shadow-xl hover:shadow-blue-900/20 transform active:scale-[0.98] transition-all mt-4 disabled:opacity-50">
-                        PLACE BET
+                        立即投注
                     </button>
                 </div>
             </div>
@@ -114,7 +133,7 @@
                 <div class="flex justify-between items-center mb-6">
                     <h3 class="font-bold text-lg flex items-center gap-2">
                         <i data-lucide="trello" class="w-5 h-5 text-blue-500"></i>
-                        Recent Outcomes
+                        最近开奖
                     </h3>
                 </div>
                 <div id="history-list" class="grid grid-cols-5 md:grid-cols-10 gap-3">
@@ -129,13 +148,13 @@
             <div class="bento-card glass rounded-3xl p-6 h-full">
                 <h3 class="font-bold text-xl mb-6 flex items-center gap-3">
                     <i data-lucide="crown" class="w-6 h-6 text-yellow-500"></i>
-                    Top Players
+                    玩家排行榜
                 </h3>
                 <div id="leaderboard" class="space-y-1">
                     <!-- Dynamic -->
                 </div>
                 <button onclick="resetBalance()" id="reset-btn" class="hidden w-full mt-6 py-3 rounded-xl border-2 border-dashed border-blue-200 text-blue-500 font-bold hover:bg-blue-50 transition-all text-sm">
-                    Reset Balance to $1,000
+                    余额不足？重置为 $1,000
                 </button>
             </div>
         </div>
@@ -148,22 +167,22 @@
                 <div class="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
                     <i data-lucide="mail" class="w-8 h-8 text-blue-600"></i>
                 </div>
-                <h2 id="modal-title" class="text-3xl font-extrabold tracking-tight">Email Login</h2>
-                <p class="text-slate-500 mt-2">Enter your email to start betting</p>
+                <h2 id="modal-title" class="text-3xl font-extrabold tracking-tight">邮箱登录</h2>
+                <p class="text-slate-500 mt-2">输入邮箱以开始游戏</p>
             </div>
 
             <div id="register-step" class="space-y-4">
                 <input type="email" id="email-input" placeholder="name@example.com" class="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-blue-500 focus:outline-none transition-all font-medium">
-                <button onclick="startRegister()" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">Send MAGIC Code</button>
+                <button onclick="startRegister()" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">发送验证码</button>
             </div>
 
             <div id="verify-step" class="hidden space-y-6">
                 <div class="flex flex-col gap-2">
                     <input type="text" id="otp-input" placeholder="000000" maxlength="6" class="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-center text-4xl font-black tracking-[0.3em] focus:border-blue-500 focus:outline-none">
-                    <p class="text-center text-xs text-slate-400 font-medium">6-digit code sent to your inbox</p>
+                    <p class="text-center text-xs text-slate-400 font-medium">验证码已发送至您的邮箱</p>
                 </div>
                 <div id="turnstile-container" class="flex justify-center"></div>
-                <button onclick="verifyCode()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all">Verify & Login</button>
+                <button onclick="verifyCode()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all">验证并登录</button>
             </div>
         </div>
     </div>
@@ -172,10 +191,19 @@
     <script>
         let currentUser = null;
         let gameState = {};
+        let lastResultId = null;
         const circle = document.getElementById('progress-circle');
         const radius = circle.r.baseVal.value;
         const circumference = radius * 2 * Math.PI;
         circle.style.strokeDasharray = `${circumference} ${circumference}`;
+
+        function showToast(msg, isError = false) {
+            const toast = document.createElement('div');
+            toast.className = `toast ${isError ? 'bg-red-500' : 'bg-green-500'}`;
+            toast.innerText = msg;
+            document.getElementById('toast-container').appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
 
         function setProgress(percent) {
             const offset = circumference - (percent / 100 * circumference);
@@ -221,7 +249,7 @@
                 `;
                 document.getElementById('reset-btn').classList.toggle('hidden', currentUser.balance >= 1000);
             } else {
-                nav.innerHTML = `<button onclick="showAuth()" class="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all">Connect Wallet</button>`;
+                nav.innerHTML = `<button onclick="showAuth()" class="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all">立即登录</button>`;
             }
             lucide.createIcons();
         }
@@ -232,9 +260,21 @@
                 gameState = await res.json();
                 document.getElementById('round-id').innerText = gameState.round_id;
 
-                // Update turnstile sitekey if provided
-                if (gameState.turnstile_sitekey) {
-                    window.turnstile_sitekey = gameState.turnstile_sitekey;
+                if (gameState.turnstile_sitekey) window.turnstile_sitekey = gameState.turnstile_sitekey;
+
+                if (gameState.history && gameState.history.length > 0) {
+                    const latest = gameState.history[0];
+                    if (lastResultId !== latest.time) {
+                        if (lastResultId !== null) {
+                            const resultText = latest.outcome === 'win' ? '本轮开奖：胜利 (WIN)' : '本轮开奖：落败 (LOSE)';
+                            const resultEl = document.getElementById('last-result');
+                            resultEl.innerText = resultText;
+                            resultEl.className = `mt-4 font-bold text-lg h-8 ${latest.outcome === 'win' ? 'text-green-500' : 'text-red-500'}`;
+                            showToast(resultText, latest.outcome !== 'win');
+                            fetchUser();
+                        }
+                        lastResultId = latest.time;
+                    }
                 }
 
                 updateLeaderboard();
@@ -252,11 +292,6 @@
 
                 setProgress(progress);
                 document.getElementById('countdown').innerText = diff > 0 ? diff.toFixed(1) : "0.0";
-
-                if (diff <= 0) {
-                    // Force refresh user data slightly after resolution
-                    if (now % 2000 < 50) fetchUser();
-                }
             }
             requestAnimationFrame(updateFrame);
         }
@@ -266,7 +301,7 @@
             container.innerHTML = (gameState.history || []).map(h => `
                 <div class="flex flex-col items-center gap-1">
                     <div class="w-full aspect-square rounded-xl flex items-center justify-center font-black text-xs ${h.outcome === 'win' ? 'bg-green-50 text-green-600 border border-green-100' : 'bg-red-50 text-red-600 border border-red-100'}">
-                        ${h.outcome === 'win' ? 'W' : 'L'}
+                        ${h.outcome === 'win' ? '胜' : '负'}
                     </div>
                 </div>
             `).join('');
@@ -311,32 +346,41 @@
                 body: JSON.stringify({ amount })
             });
             if (res.ok) {
+                showToast(`成功下注 $${amount.toLocaleString()}`);
                 await fetchUser();
             } else {
-                alert(await res.text());
+                showToast(await res.text(), true);
             }
             btn.disabled = false;
         }
 
         async function resetBalance() {
             const res = await fetch('/api/reset', { method: 'POST' });
-            if (res.ok) await fetchUser();
+            if (res.ok) {
+                showToast("余额已重置为 $1,000");
+                await fetchUser();
+            }
         }
 
         function showAuth() { document.getElementById('auth-modal').classList.remove('hidden'); }
         async function startRegister() {
             const email = document.getElementById('email-input').value;
-            await fetch('/api/auth/register', {
+            const res = await fetch('/api/auth/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email })
             });
-            document.getElementById('register-step').classList.add('hidden');
-            document.getElementById('verify-step').classList.remove('hidden');
-            turnstile.render('#turnstile-container', {
-                sitekey: window.turnstile_sitekey || '1x00000000000000000000AA',
-                callback: (token) => { window.tsToken = token; }
-            });
+            if (res.ok) {
+                showToast("验证码已发送，请查收邮件");
+                document.getElementById('register-step').classList.add('hidden');
+                document.getElementById('verify-step').classList.remove('hidden');
+                turnstile.render('#turnstile-container', {
+                    sitekey: window.turnstile_sitekey || '1x00000000000000000000AA',
+                    callback: (token) => { window.tsToken = token; }
+                });
+            } else {
+                showToast("发送失败，请重试", true);
+            }
         }
         async function verifyCode() {
             const res = await fetch('/api/auth/verify', {
@@ -348,8 +392,12 @@
                     turnstile_token: window.tsToken || 'mock'
                 })
             });
-            if (res.ok) location.reload();
-            else alert('Invalid verification');
+            if (res.ok) {
+                showToast("登录成功");
+                location.reload();
+            } else {
+                showToast("验证码校验失败", true);
+            }
         }
         function logout() {
             document.cookie = "token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
