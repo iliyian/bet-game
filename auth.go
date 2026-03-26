@@ -79,7 +79,7 @@ func SendOTP(email, code string) error {
 	}
 
 	payload := map[string]interface{}{
-		"from":    "BetGame <onboarding@resend.dev>",
+		"from":    "BetGame <noreply@iliyian.com>",
 		"to":      []string{email},
 		"subject": "Your Login Verification Code",
 		"html":    fmt.Sprintf("<strong>Welcome to BetGame!</strong><p>Your 6-digit verification code is: <strong>%s</strong></p>", code),
