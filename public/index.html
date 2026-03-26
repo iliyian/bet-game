@@ -75,9 +75,9 @@
 
             <!-- Hero Section: Countdown -->
             <div class="bento-card glass rounded-3xl p-8 flex flex-col items-center justify-center relative overflow-hidden min-h-[320px]">
-                <div class="absolute top-6 left-8 flex items-center gap-2 text-slate-400 font-semibold text-sm uppercase tracking-widest">
-                    <i data-lucide="clock" class="w-4 h-4"></i>
-                    第 #<span id="round-id">--</span> 轮
+                <div id="ping-indicator" class="absolute top-6 right-8 flex items-center gap-1.5 text-slate-400 font-semibold text-sm tabular-nums transition-colors">
+                    <span id="ping-dot" class="w-2 h-2 rounded-full bg-slate-300 transition-colors"></span>
+                    <span id="ping-value">--</span><span class="text-[10px]">ms</span>
                 </div>
 
                 <div class="relative flex items-center justify-center">
@@ -104,11 +104,11 @@
                             <span class="absolute right-6 top-1/2 -translate-y-1/2 text-slate-300 font-bold text-xl">$</span>
                         </div>
                     </div>
-                    <div class="grid grid-cols-4 gap-2 mt-4">
-                        <button onclick="setBet(10)" class="py-2 rounded-xl bg-white border border-slate-100 hover:border-blue-200 hover:bg-blue-50 text-xs font-bold transition-all">+$10</button>
-                        <button onclick="setBet(50)" class="py-2 rounded-xl bg-white border border-slate-100 hover:border-blue-200 hover:bg-blue-50 text-xs font-bold transition-all">+$50</button>
-                        <button onclick="setBet(100)" class="py-2 rounded-xl bg-white border border-slate-100 hover:border-blue-200 hover:bg-blue-50 text-xs font-bold transition-all">+$100</button>
-                        <button onclick="setMax()" class="py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-all">全部</button>
+                    <div class="grid grid-cols-4 gap-2 mt-4" id="percent-btns">
+                        <button onclick="setBetPercent(10)" data-pct="10" class="py-2 rounded-xl bg-white border border-slate-100 hover:border-blue-200 hover:bg-blue-50 text-xs font-bold transition-all">10%</button>
+                        <button onclick="setBetPercent(25)" data-pct="25" class="py-2 rounded-xl bg-white border border-slate-100 hover:border-blue-200 hover:bg-blue-50 text-xs font-bold transition-all">25%</button>
+                        <button onclick="setBetPercent(50)" data-pct="50" class="py-2 rounded-xl bg-white border border-slate-100 hover:border-blue-200 hover:bg-blue-50 text-xs font-bold transition-all">50%</button>
+                        <button onclick="setBetPercent(100)" data-pct="100" class="py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-all">100%</button>
                     </div>
                 </div>
 
@@ -128,6 +128,20 @@
                 </div>
             </div>
 
+            <!-- Current Round Bets -->
+            <div class="bento-card glass rounded-3xl p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-bold text-lg flex items-center gap-2">
+                        <i data-lucide="users" class="w-5 h-5 text-blue-500"></i>
+                        本轮下注
+                    </h3>
+                    <span id="bets-summary" class="text-xs text-slate-400 font-medium"></span>
+                </div>
+                <div id="current-bets-list" class="space-y-2 min-h-[2.5rem] flex flex-col justify-center">
+                    <p class="text-sm text-slate-300 text-center font-medium">暂无下注</p>
+                </div>
+            </div>
+
             <!-- History Bento Item -->
             <div class="bento-card glass rounded-3xl p-6">
                 <div class="flex justify-between items-center mb-6">
@@ -135,8 +149,9 @@
                         <i data-lucide="trello" class="w-5 h-5 text-blue-500"></i>
                         最近开奖
                     </h3>
+                    <span class="text-xs text-slate-300 font-medium flex items-center gap-1">旧 <i data-lucide="arrow-right" class="w-3 h-3"></i> 新</span>
                 </div>
-                <div id="history-list" class="grid grid-cols-5 md:grid-cols-10 gap-3">
+                <div id="history-list" class="grid grid-cols-5 md:grid-cols-10 gap-3 items-end">
                     <!-- Dynamic -->
                 </div>
             </div>
@@ -209,6 +224,15 @@
         let currentUser = null;
         let gameState = {};
         let lastResultId = null;
+        let activeBetPercent = null; // Track last selected bet percentage
+        let latencyMs = null; // Latest network round-trip time
+
+        // Escape HTML to prevent XSS from user-controlled data.
+        function escapeHTML(str) {
+            const div = document.createElement('div');
+            div.appendChild(document.createTextNode(str));
+            return div.innerHTML;
+        }
         const circle = document.getElementById('progress-circle');
         const radius = circle.r.baseVal.value;
         const circumference = radius * 2 * Math.PI;
@@ -230,6 +254,14 @@
         async function init() {
             lucide.createIcons();
             document.getElementById('bet-amount').addEventListener('input', (e) => {
+                // If the user is typing manually (not triggered by applyBetAmount),
+                // clear the tracked percentage so we don't override their value later.
+                if (!e.isTrusted) {
+                    // Programmatic event from applyBetAmount — just update preview.
+                } else {
+                    activeBetPercent = null;
+                    highlightPercentBtn();
+                }
                 const val = parseFloat(e.target.value) || 0;
                 document.getElementById('payout-preview').innerText = '$' + (val * 2).toLocaleString(undefined, {minimumFractionDigits: 2});
             });
@@ -250,6 +282,7 @@
                     currentUser = null;
                 }
                 updateUserInfo();
+                applyBetAmount();
             } catch (e) { currentUser = null; }
         }
 
@@ -272,7 +305,7 @@
         function updateUserInfo() {
             const nav = document.getElementById('user-nav');
             if (currentUser) {
-                const displayName = currentUser.username || currentUser.email.split('@')[0];
+                const displayName = escapeHTML(currentUser.username || currentUser.email.split('@')[0]);
                 nav.innerHTML = `
                     <div class="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
                         <div class="text-right">
@@ -294,11 +327,41 @@
             lucide.createIcons();
         }
 
+        // Update the ping indicator with current latency.
+        function updatePing(ms) {
+            const dot = document.getElementById('ping-dot');
+            const val = document.getElementById('ping-value');
+            const indicator = document.getElementById('ping-indicator');
+            if (ms === null) {
+                val.textContent = '--';
+                dot.className = 'w-2 h-2 rounded-full bg-slate-300 transition-colors';
+                indicator.className = indicator.className.replace(/text-(green|yellow|orange|red)-\d+/g, '') + ' text-slate-400';
+                return;
+            }
+            val.textContent = ms;
+            let dotColor, textColor;
+            if (ms < 100) {
+                dotColor = 'bg-green-500'; textColor = 'text-green-600';
+            } else if (ms < 200) {
+                dotColor = 'bg-yellow-500'; textColor = 'text-yellow-600';
+            } else if (ms < 500) {
+                dotColor = 'bg-orange-500'; textColor = 'text-orange-600';
+            } else {
+                dotColor = 'bg-red-500'; textColor = 'text-red-600';
+            }
+            dot.className = `w-2 h-2 rounded-full ${dotColor} transition-colors`;
+            indicator.className = `absolute top-6 right-8 flex items-center gap-1.5 ${textColor} font-semibold text-sm tabular-nums transition-colors`;
+        }
+
         async function pollGameState() {
+            const t0 = performance.now();
             try {
                 const res = await fetch('/api/game/state');
+                const t1 = performance.now();
+                latencyMs = Math.round(t1 - t0);
+                updatePing(latencyMs);
+
                 gameState = await res.json();
-                document.getElementById('round-id').innerText = gameState.round_id;
 
                 if (gameState.turnstile_sitekey) window.turnstile_sitekey = gameState.turnstile_sitekey;
 
@@ -319,7 +382,10 @@
 
                 updateLeaderboard();
                 updateHistory();
-            } catch (e) {}
+                updateCurrentBets();
+            } catch (e) {
+                updatePing(null);
+            }
             setTimeout(pollGameState, 1000);
         }
 
@@ -336,15 +402,57 @@
             requestAnimationFrame(updateFrame);
         }
 
+        function updateCurrentBets() {
+            const bets = gameState.current_bets || [];
+            const list = document.getElementById('current-bets-list');
+            const summary = document.getElementById('bets-summary');
+
+            if (bets.length === 0) {
+                list.innerHTML = '<p class="text-sm text-slate-300 text-center font-medium">暂无下注</p>';
+                summary.textContent = '';
+                return;
+            }
+
+            const total = bets.reduce((s, b) => s + b.amount, 0);
+            summary.textContent = `${bets.length} 人 · 共 $${total.toLocaleString()}`;
+
+            // Find max amount for bar scaling.
+            const max = bets[0].amount;
+            list.innerHTML = bets.map(b => {
+                const barPct = Math.round(b.amount / max * 100);
+                return `
+                <div class="flex items-center gap-3">
+                    <span class="text-sm font-bold text-slate-700 w-24 shrink-0 truncate">${escapeHTML(b.name)}</span>
+                    <div class="flex-1 h-6 bg-slate-100 rounded-lg overflow-hidden">
+                        <div class="h-full bg-blue-500 rounded-lg transition-all duration-500 flex items-center justify-end pr-2" style="width:${barPct}%">
+                            <span class="text-[10px] font-black text-white whitespace-nowrap">$${b.amount.toLocaleString()}</span>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
         function updateHistory() {
             const container = document.getElementById('history-list');
-            container.innerHTML = (gameState.history || []).map(h => `
-                <div class="flex flex-col items-center gap-1">
-                    <div class="w-full aspect-square rounded-xl flex items-center justify-center font-black text-xs ${h.outcome === 'win' ? 'bg-green-50 text-green-600 border border-green-100' : 'bg-red-50 text-red-600 border border-red-100'}">
-                        ${h.outcome === 'win' ? '胜' : '负'}
+            // Reverse: API returns newest-first, we want newest on the right.
+            const items = (gameState.history || []).slice().reverse();
+            const total = items.length;
+            container.innerHTML = items.map((h, i) => {
+                // Opacity: oldest (i=0) is faintest, newest (i=total-1) is fully opaque.
+                // Scale from 0.3 to 1.0
+                const opacity = total > 1 ? 0.3 + 0.7 * (i / (total - 1)) : 1;
+                const isWin = h.outcome === 'win';
+                const isNewest = i === total - 1;
+                // Newest item gets a subtle ring to draw the eye.
+                const ring = isNewest ? (isWin ? 'ring-2 ring-green-400 ring-offset-1' : 'ring-2 ring-red-400 ring-offset-1') : '';
+                const scale = isNewest ? 'scale-110' : '';
+                return `
+                <div class="flex flex-col items-center gap-1 transition-all" style="opacity:${opacity}">
+                    <div class="w-full aspect-square rounded-xl flex items-center justify-center font-black text-xs ${isWin ? 'bg-green-50 text-green-600 border border-green-100' : 'bg-red-50 text-red-600 border border-red-100'} ${ring} ${scale} transition-all">
+                        ${isWin ? '胜' : '负'}
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
         }
 
         function updateLeaderboard() {
@@ -355,24 +463,40 @@
                         <span class="w-6 h-6 flex items-center justify-center rounded-lg ${i < 3 ? 'bg-yellow-100 text-yellow-700 font-bold' : 'text-slate-400 font-medium'} text-xs">
                             ${i + 1}
                         </span>
-                        <span class="font-bold text-slate-700 truncate max-w-[120px]">${u.name}</span>
+                        <span class="font-bold text-slate-700 truncate max-w-[120px]">${escapeHTML(u.name)}</span>
                     </div>
                     <span class="font-black text-blue-600">$${u.balance.toLocaleString()}</span>
                 </div>
             `).join('');
         }
 
-        function setBet(add) {
+        function setBetPercent(pct) {
+            if (!currentUser) return;
+            activeBetPercent = pct;
+            applyBetAmount();
+            highlightPercentBtn();
+        }
+
+        // Recalculate bet amount from activeBetPercent and sync the payout preview.
+        function applyBetAmount() {
+            if (!currentUser || activeBetPercent === null) return;
             const input = document.getElementById('bet-amount');
-            input.value = (parseInt(input.value) || 0) + add;
+            input.value = Math.floor(currentUser.balance * activeBetPercent / 100);
             input.dispatchEvent(new Event('input'));
         }
 
-        function setMax() {
-            if (currentUser) {
-                document.getElementById('bet-amount').value = currentUser.balance;
-                document.getElementById('bet-amount').dispatchEvent(new Event('input'));
-            }
+        // Highlight the active percentage button.
+        function highlightPercentBtn() {
+            document.querySelectorAll('#percent-btns button').forEach(btn => {
+                const pct = parseInt(btn.dataset.pct);
+                if (pct === activeBetPercent) {
+                    btn.className = 'py-2 rounded-xl bg-blue-600 text-white text-xs font-bold transition-all';
+                } else {
+                    btn.className = pct === 100
+                        ? 'py-2 rounded-xl bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-all'
+                        : 'py-2 rounded-xl bg-white border border-slate-100 hover:border-blue-200 hover:bg-blue-50 text-xs font-bold transition-all';
+                }
+            });
         }
 
         async function placeBet() {

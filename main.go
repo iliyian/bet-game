@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -12,8 +13,12 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// gameMu protects round resolution and bet placement from concurrent access.
+var gameMu sync.Mutex
+
 func main() {
 	godotenv.Load()
+	initJWT()
 	initDB()
 
 	r := chi.NewRouter()
@@ -58,6 +63,10 @@ func gameLoop() {
 }
 
 func resolveRound() {
+	// Lock to prevent concurrent bet placement during resolution.
+	gameMu.Lock()
+	defer gameMu.Unlock()
+
 	tx, err := db.Begin()
 	if err != nil {
 		fmt.Printf("Error starting transaction: %v\n", err)
@@ -68,6 +77,7 @@ func resolveRound() {
 	var roundID int
 	err = tx.QueryRow("SELECT current_round_id FROM game_state WHERE id = 1").Scan(&roundID)
 	if err != nil {
+		fmt.Printf("Error reading round: %v\n", err)
 		return
 	}
 
@@ -76,25 +86,48 @@ func resolveRound() {
 		outcome = "lose"
 	}
 
-	// Update bets and balances
+	// Update bets and balances with proper error checking.
 	if outcome == "win" {
 		_, err = tx.Exec(`
 			UPDATE users
-			SET balance = balance + (SELECT SUM(amount) FROM bets WHERE user_id = users.id AND round_id = ? AND status = 'pending')
+			SET balance = balance + 2 * (SELECT SUM(amount) FROM bets WHERE user_id = users.id AND round_id = ? AND status = 'pending')
 			WHERE id IN (SELECT user_id FROM bets WHERE round_id = ? AND status = 'pending')
 		`, roundID, roundID)
+		if err != nil {
+			fmt.Printf("Error updating balances: %v\n", err)
+			return
+		}
 		_, err = tx.Exec("UPDATE bets SET status = 'won' WHERE round_id = ? AND status = 'pending'", roundID)
+		if err != nil {
+			fmt.Printf("Error updating bet status: %v\n", err)
+			return
+		}
 	} else {
 		_, err = tx.Exec("UPDATE bets SET status = 'lost' WHERE round_id = ? AND status = 'pending'", roundID)
+		if err != nil {
+			fmt.Printf("Error updating bet status: %v\n", err)
+			return
+		}
 	}
 
 	// Insert into history
 	_, err = tx.Exec("INSERT INTO history (outcome) VALUES (?)", outcome)
+	if err != nil {
+		fmt.Printf("Error inserting history: %v\n", err)
+		return
+	}
 
 	// Update game state for next round
-	nextResat := time.Now().Add(10 * time.Second)
-	_, err = tx.Exec("UPDATE game_state SET current_round_id = current_round_id + 1, next_resolution_at = ? WHERE id = 1", nextResat)
+	nextReset := time.Now().Add(10 * time.Second)
+	_, err = tx.Exec("UPDATE game_state SET current_round_id = current_round_id + 1, next_resolution_at = ? WHERE id = 1", nextReset)
+	if err != nil {
+		fmt.Printf("Error updating game state: %v\n", err)
+		return
+	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		fmt.Printf("Error committing round %d: %v\n", roundID, err)
+		return
+	}
 	fmt.Printf("Round %d resolved: %s\n", roundID, outcome)
 }
