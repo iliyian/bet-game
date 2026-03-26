@@ -14,10 +14,16 @@ import (
 
 func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Email string `json:"email"`
+		Email          string `json:"email"`
+		TurnstileToken string `json:"turnstile_token"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+
+	if !VerifyTurnstile(input.TurnstileToken) {
+		http.Error(w, "安全验证未通过", http.StatusForbidden)
 		return
 	}
 
@@ -36,17 +42,11 @@ func RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
 func VerifyHandler(w http.ResponseWriter, r *http.Request) {
 	var input struct {
-		Email          string `json:"email"`
-		Code           string `json:"code"`
-		TurnstileToken string `json:"turnstile_token"`
+		Email string `json:"email"`
+		Code  string `json:"code"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 		http.Error(w, "Bad request", http.StatusBadRequest)
-		return
-	}
-
-	if !VerifyTurnstile(input.TurnstileToken) {
-		http.Error(w, "Turnstile verification failed", http.StatusForbidden)
 		return
 	}
 
@@ -54,7 +54,7 @@ func VerifyHandler(w http.ResponseWriter, r *http.Request) {
 	var expiresAt time.Time
 	err := db.QueryRow("SELECT code, expires_at FROM otp_codes WHERE email = ?", input.Email).Scan(&storedCode, &expiresAt)
 	if err != nil || storedCode != input.Code || time.Now().After(expiresAt) {
-		http.Error(w, "Invalid or expired OTP", http.StatusUnauthorized)
+		http.Error(w, "验证码无效或已过期", http.StatusUnauthorized)
 		return
 	}
 
@@ -129,7 +129,7 @@ func PlaceBetHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewDecoder(r.Body).Decode(&input)
 
 	if input.Amount <= 0 {
-		http.Error(w, "Invalid amount", http.StatusBadRequest)
+		http.Error(w, "请输入有效的投注金额", http.StatusBadRequest)
 		return
 	}
 
@@ -139,7 +139,7 @@ func PlaceBetHandler(w http.ResponseWriter, r *http.Request) {
 	var balance int
 	tx.QueryRow("SELECT balance FROM users WHERE id = ?", userID).Scan(&balance)
 	if balance < input.Amount {
-		http.Error(w, "Insufficient balance", http.StatusBadRequest)
+		http.Error(w, "余额不足", http.StatusBadRequest)
 		return
 	}
 

@@ -16,7 +16,7 @@ var jwtKey []byte
 func init() {
 	s := os.Getenv("JWT_SECRET")
 	if s == "" {
-		s = "default_secret_key_1234567890123456789012"
+		panic("JWT_SECRET 环境变量未设置")
 	}
 	jwtKey = []byte(s)
 }
@@ -53,8 +53,8 @@ func AuthMiddleware(next http.Handler) http.Handler {
 
 func VerifyTurnstile(token string) bool {
 	secret := os.Getenv("TURNSTILE_SECRET")
-	if secret == "" || token == "mock" {
-		return true
+	if secret == "" {
+		panic("TURNSTILE_SECRET 环境变量未设置")
 	}
 
 	res, err := http.PostForm("https://challenges.cloudflare.com/turnstile/v0/siteverify", map[string][]string{
@@ -76,8 +76,7 @@ func VerifyTurnstile(token string) bool {
 func SendOTP(email, code string) error {
 	resendKey := os.Getenv("RESEND_KEY")
 	if resendKey == "" {
-		fmt.Printf("[DEBUG] SendOTP to %s: %s\n", email, code)
-		return nil
+		return fmt.Errorf("RESEND_KEY 环境变量未设置")
 	}
 
 	payload := map[string]interface{}{

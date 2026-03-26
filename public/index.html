@@ -173,6 +173,7 @@
 
             <div id="register-step" class="space-y-4">
                 <input type="email" id="email-input" placeholder="name@example.com" class="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-blue-500 focus:outline-none transition-all font-medium">
+                <div id="turnstile-container" class="flex justify-center"></div>
                 <button onclick="startRegister()" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">发送验证码</button>
             </div>
 
@@ -181,7 +182,6 @@
                     <input type="text" id="otp-input" placeholder="000000" maxlength="6" class="w-full px-6 py-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-center text-4xl font-black tracking-[0.3em] focus:border-blue-500 focus:outline-none">
                     <p class="text-center text-xs text-slate-400 font-medium">验证码已发送至您的邮箱</p>
                 </div>
-                <div id="turnstile-container" class="flex justify-center"></div>
                 <button onclick="verifyCode()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all">验证并登录</button>
             </div>
         </div>
@@ -402,24 +402,29 @@
             }
         }
 
-        function showAuth() { document.getElementById('auth-modal').classList.remove('hidden'); }
+        function showAuth() {
+            document.getElementById('auth-modal').classList.remove('hidden');
+            if (!window._turnstileRendered) {
+                window._turnstileRendered = true;
+                turnstile.render('#turnstile-container', {
+                    sitekey: window.turnstile_sitekey,
+                    callback: (token) => { window.tsToken = token; }
+                });
+            }
+        }
         async function startRegister() {
             const email = document.getElementById('email-input').value;
             const res = await fetch('/api/auth/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email })
+                body: JSON.stringify({ email, turnstile_token: window.tsToken })
             });
             if (res.ok) {
                 showToast("验证码已发送，请查收邮件");
                 document.getElementById('register-step').classList.add('hidden');
                 document.getElementById('verify-step').classList.remove('hidden');
-                turnstile.render('#turnstile-container', {
-                    sitekey: window.turnstile_sitekey || '1x00000000000000000000AA',
-                    callback: (token) => { window.tsToken = token; }
-                });
             } else {
-                showToast("发送失败，请重试", true);
+                showToast(await res.text(), true);
             }
         }
         async function verifyCode() {
@@ -428,8 +433,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     email: document.getElementById('email-input').value,
-                    code: document.getElementById('otp-input').value,
-                    turnstile_token: window.tsToken || 'mock'
+                    code: document.getElementById('otp-input').value
                 })
             });
             if (res.ok) {
