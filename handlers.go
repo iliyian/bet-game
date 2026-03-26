@@ -233,6 +233,9 @@ func PlaceBetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusOK)
+
+	// Notify all clients about the new bet.
+	go BroadcastGameState()
 }
 
 func ResetBalanceHandler(w http.ResponseWriter, r *http.Request) {
@@ -257,17 +260,26 @@ func ResetBalanceHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func GetGameStateHandler(w http.ResponseWriter, r *http.Request) {
+	data, err := buildGameStateJSON()
+	if err != nil {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
+}
+
+// buildGameStateJSON returns the current game state as JSON bytes.
+func buildGameStateJSON() ([]byte, error) {
 	var nextRes time.Time
 	var roundID int
 	if err := db.QueryRow("SELECT current_round_id, next_resolution_at FROM game_state WHERE id = 1").Scan(&roundID, &nextRes); err != nil {
-		http.Error(w, "Internal error", http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 
 	rows, err := db.Query("SELECT outcome, timestamp FROM history ORDER BY timestamp DESC LIMIT 10")
 	if err != nil {
-		http.Error(w, "Internal error", http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -283,8 +295,7 @@ func GetGameStateHandler(w http.ResponseWriter, r *http.Request) {
 
 	lbRows, err := db.Query("SELECT COALESCE(username, SUBSTR(email, 1, INSTR(email, '@')-1)), balance FROM users ORDER BY balance DESC LIMIT 10")
 	if err != nil {
-		http.Error(w, "Internal error", http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 	defer lbRows.Close()
 
@@ -298,15 +309,13 @@ func GetGameStateHandler(w http.ResponseWriter, r *http.Request) {
 		leaderboard = append(leaderboard, map[string]interface{}{"name": name, "balance": balance})
 	}
 
-	// Current round's pending bets.
 	betRows, err := db.Query(`
 		SELECT COALESCE(u.username, SUBSTR(u.email, 1, INSTR(u.email, '@')-1)), b.amount
 		FROM bets b JOIN users u ON b.user_id = u.id
 		WHERE b.round_id = ? AND b.status = 'pending'
 		ORDER BY b.amount DESC`, roundID)
 	if err != nil {
-		http.Error(w, "Internal error", http.StatusInternalServerError)
-		return
+		return nil, err
 	}
 	defer betRows.Close()
 
@@ -320,8 +329,7 @@ func GetGameStateHandler(w http.ResponseWriter, r *http.Request) {
 		currentBets = append(currentBets, map[string]interface{}{"name": name, "amount": amount})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	return json.Marshal(map[string]interface{}{
 		"round_id":          roundID,
 		"next_res_at":       nextRes,
 		"history":           history,

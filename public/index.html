@@ -266,7 +266,7 @@
                 document.getElementById('payout-preview').innerText = '$' + (val * 2).toLocaleString(undefined, {minimumFractionDigits: 2});
             });
             await fetchUser();
-            pollGameState();
+            connectWebSocket();
             requestAnimationFrame(updateFrame);
         }
 
@@ -353,40 +353,63 @@
             indicator.className = `absolute top-6 right-8 flex items-center gap-1.5 ${textColor} font-semibold text-sm tabular-nums transition-colors`;
         }
 
-        async function pollGameState() {
-            const t0 = performance.now();
-            try {
-                const res = await fetch('/api/game/state');
-                const t1 = performance.now();
-                latencyMs = Math.round(t1 - t0);
-                updatePing(latencyMs);
+        let ws = null;
+        let wsReconnectDelay = 1000;
 
-                gameState = await res.json();
+        function connectWebSocket() {
+            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            ws = new WebSocket(`${proto}//${location.host}/api/ws`);
 
-                if (gameState.turnstile_sitekey) window.turnstile_sitekey = gameState.turnstile_sitekey;
+            ws.onopen = () => {
+                wsReconnectDelay = 1000;
+                updatePing(0);
+            };
 
-                if (gameState.history && gameState.history.length > 0) {
-                    const latest = gameState.history[0];
-                    if (lastResultId !== latest.time) {
-                        if (lastResultId !== null) {
-                            const resultText = latest.outcome === 'win' ? '本轮开奖：胜利 (WIN)' : '本轮开奖：落败 (LOSE)';
-                            const resultEl = document.getElementById('last-result');
-                            resultEl.innerText = resultText;
-                            resultEl.className = `mt-4 font-bold text-lg h-8 ${latest.outcome === 'win' ? 'text-green-500' : 'text-red-500'}`;
-                            showToast(resultText, latest.outcome !== 'win');
-                            fetchUser();
-                        }
-                        lastResultId = latest.time;
-                    }
-                }
+            ws.onmessage = (event) => {
+                const receiveTime = performance.now();
+                try {
+                    const data = JSON.parse(event.data);
+                    handleGameState(data);
+                    // Measure pseudo-latency: time to parse + process.
+                    const delta = Math.round(performance.now() - receiveTime);
+                    updatePing(delta < 1 ? 1 : delta);
+                } catch (e) {}
+            };
 
-                updateLeaderboard();
-                updateHistory();
-                updateCurrentBets();
-            } catch (e) {
+            ws.onclose = () => {
                 updatePing(null);
+                setTimeout(() => {
+                    wsReconnectDelay = Math.min(wsReconnectDelay * 2, 10000);
+                    connectWebSocket();
+                }, wsReconnectDelay);
+            };
+
+            ws.onerror = () => ws.close();
+        }
+
+        function handleGameState(data) {
+            gameState = data;
+
+            if (gameState.turnstile_sitekey) window.turnstile_sitekey = gameState.turnstile_sitekey;
+
+            if (gameState.history && gameState.history.length > 0) {
+                const latest = gameState.history[0];
+                if (lastResultId !== latest.time) {
+                    if (lastResultId !== null) {
+                        const resultText = latest.outcome === 'win' ? '本轮开奖：胜利 (WIN)' : '本轮开奖：落败 (LOSE)';
+                        const resultEl = document.getElementById('last-result');
+                        resultEl.innerText = resultText;
+                        resultEl.className = `mt-4 font-bold text-lg h-8 ${latest.outcome === 'win' ? 'text-green-500' : 'text-red-500'}`;
+                        showToast(resultText, latest.outcome !== 'win');
+                        fetchUser();
+                    }
+                    lastResultId = latest.time;
+                }
             }
-            setTimeout(pollGameState, 1000);
+
+            updateLeaderboard();
+            updateHistory();
+            updateCurrentBets();
         }
 
         function updateFrame() {

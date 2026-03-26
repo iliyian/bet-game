@@ -30,6 +30,7 @@ func main() {
 		r.Post("/auth/register", RegisterHandler)
 		r.Post("/auth/verify", VerifyHandler)
 		r.Get("/game/state", GetGameStateHandler)
+		r.Get("/ws", WSHandler)
 
 		r.Group(func(r chi.Router) {
 			r.Use(AuthMiddleware)
@@ -130,4 +131,7 @@ func resolveRound() {
 		return
 	}
 	fmt.Printf("Round %d resolved: %s\n", roundID, outcome)
+
+	// Push updated state to all connected WebSocket clients.
+	BroadcastGameState()
 }
